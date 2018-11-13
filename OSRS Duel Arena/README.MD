@@ -23,3 +23,4 @@ sys    0m1.410s
 ```
 
 > 4,997,379/10,000,000 = 49.97379% or 50.02621% chance of winning.
+Percent Error negligible 0.0524%
