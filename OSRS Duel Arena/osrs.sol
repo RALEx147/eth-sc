@@ -1,5 +1,5 @@
-pragma solidity ^0.4.20;
-// pragma solidity ^0.5.0;
+pragma solidity ^0.4.24;
+
 
 /*
 TODO
@@ -15,7 +15,7 @@ contract roll{
     uint nonce = 0;
     function rand(uint min, uint max) internal returns (uint){
         nonce = SafeMath.add(nonce,1);
-        uint generated = uint(keccak256(abi.encodePacked(nonce, block.number)));
+        uint generated = uint(keccak256(abi.encodePacked(nonce, block.number, min, max)));
         uint base = SafeMath.sub(max, min);
         return SafeMath.add(SafeMath.mod(generated,base),min);
     }
@@ -45,7 +45,7 @@ contract osrs is roll {
       uint p2Max = _player2.maxHit();
 
       uint round = 0;
-      while (health(_player1) != 0 && health(_player2) != 0 && round <= 15) {
+      while ((_player1.getHP() != 0 || _player2.getHP() != 0) && round <= 15) {
           require(round < 5);
           uint p1Roll = rand(0, SafeMath.add(decFactor, 1));
           uint p2Roll = rand(0, SafeMath.add(decFactor, 1));
@@ -55,19 +55,35 @@ contract osrs is roll {
           if (p2Acc > p2Roll){  hit(_player1, p2Max, round); }
           else{ _player1.deductHP(0, "miss"); }//i bet they they never miss huh?
 
-          if (health(_player1) > 0) {  applyPoison(_player1, round); }
-          if (health(_player2) > 0) {  applyPoison(_player2, round); }
+          if (_player1.getHP() > 0) {  applyPoison(_player1, round); }
+          if (_player2.getHP() > 0) {  applyPoison(_player2, round); }
 
           round += 1;
       }
 
-
-      if (health(_player1) == 0 && health(_player2) == 0) {return (_player1.getPID() < _player2.getPID() ? _player1 : _player2); }
-      if (health(_player1) > 0 && !(health(_player2) > 0)) {  return _player1; }
-      else if (health(_player2) > 0 && !(health(_player1) > 0)) { return _player2; }
-      else{ return (health(_player1) > health(_player2) ? _player1 : _player2); }
-
-
+        uint p1hp = _player1.getHP();
+        uint p2hp = _player2.getHP();
+        uint p1pid = _player1.getPID();
+        uint p2pid = _player2.getPID();
+        
+      if (p1hp == p2hp) {
+         if (p1pid <= p2pid){
+             return _player1;
+         }
+         else{
+             return _player2;
+         }
+        }
+      if (p1hp == 0) {  return _player2; }
+      if (p2hp == 0) { return _player1; }
+      if (p1hp > p2hp){
+          return _player1;
+         }
+    return _player2;
+       
+       
+   
+  
   }
 
 
@@ -87,6 +103,7 @@ contract osrs is roll {
           if (poisonTicked >= 7){
               _player.deductHP(4, "p");
               _player.poisoned(round);
+              
           }
       }
   }
@@ -102,9 +119,6 @@ contract osrs is roll {
 
 
 
-  function health(player _player) internal view returns (uint) {
-      return _player.getHP();
-  }
 
 
 
@@ -127,13 +141,15 @@ contract DuelArena is osrs{
   uint public recentwinninghit;
 
   uint public testshowbetslength;
+
+  
   mapping(address => bet) public bets;
 
   function join(uint _health, uint _attack, uint _strength, uint _defence, attackStyle _style, uint _atkBonus, uint _strBonus, uint _defBonus, string memory _name/*, player _opponent*/) public payable{
       /* resetDisplays(); */
 
-      player user = new player(_health, _attack, _strength, _defence, _style, _atkBonus, _strBonus, _defBonus, _name);
-      bets[msg.sender].user = user;
+      player p = new player(_health, _attack, _strength, _defence, _style, _atkBonus, _strBonus, _defBonus, _name);
+      bets[msg.sender].user = p;
       bets[msg.sender].amount = msg.value;
 
 
@@ -141,8 +157,10 @@ contract DuelArena is osrs{
       totalBet = SafeMath.add(totalBet, msg.value);
 
       if (addresses.length >= 2) {
-          require(totalBet == SafeMath.add(bets[addresses[0]].amount, bets[addresses[1]].amount));
-          won(duel(bets[addresses[0]].user, bets[addresses[1]].user));
+         
+         require(totalBet == SafeMath.add(bets[addresses[0]].amount, bets[addresses[1]].amount));
+          player d = duel(bets[addresses[0]].user, bets[addresses[1]].user);
+          won(d);
       }
   }
 
@@ -152,10 +170,12 @@ contract DuelArena is osrs{
       uint winnings = SafeMath.sub(totalBet, taxed);
 
       for(uint i = 0; i < addresses.length; i++){
-          address playerAddress = addresses[i];
+          address playerAddress = addresses[0];
           bets[playerAddress].user.reset();
           if(bets[playerAddress].user == _winner){
               playerAddress.transfer(winnings);
+              
+              
               recentWinner = bets[playerAddress].user.getName();
               /* recentwinninghit = bets[playerAddress].user.getHitsplats()[0]; */
           }
@@ -168,6 +188,7 @@ contract DuelArena is osrs{
       delete bets[addresses[1]];
       addresses.length = 0;
       totalBet = 0;
+      
 
   }
 
